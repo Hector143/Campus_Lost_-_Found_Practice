@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin - Lost & Found</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">Lost &amp; Found · Admin</div>
+    <div class="user">
+        <a class="link" href="dashboard.html">Back to dashboard</a>
+        <span id="meName">...</span>
+        <button id="logoutBtn" class="btn ghost">Log out</button>
+    </div>
+</header>
+
+<main class="container">
+
+    <section id="stats" class="stats">
+        <!-- filled by JS -->
+    </section>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="users">Users</button>
+        <button class="tab"        data-tab="logs">Activity log</button>
+    </div>
+
+    <section id="usersTab">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Username</th><th>Role</th><th>Joined</th>
+                </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+        </table>
+    </section>
+
+    <section id="logsTab" class="hidden">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>When</th><th>Action</th><th>User</th><th>Details</th><th>IP</th>
+                </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+        </table>
+    </section>
+
+</main>
+
+<script src="app.js"></script>
+<script>
+Auth.requireRole('ADMIN');
+const me = Auth.user();
+document.getElementById('meName').textContent = me.full_name;
+document.getElementById('logoutBtn').onclick = () => Auth.logout();
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    document.getElementById('usersTab').classList.toggle('hidden', t.dataset.tab !== 'users');
+    document.getElementById('logsTab' ).classList.toggle('hidden', t.dataset.tab !== 'logs');
+}));
+
+// Stats
+async function loadStats() {
+    const s = await api('/api/admin/stats');
+    document.getElementById('stats').innerHTML = `
+        <div class="stat"><b>${s.users}</b><span>Users</span></div>
+        <div class="stat"><b>${s.items}</b><span>Items</span></div>
+        <div class="stat"><b>${s.lost}</b><span>Lost</span></div>
+        <div class="stat"><b>${s.found}</b><span>Found</span></div>
+        <div class="stat"><b>${s.claims}</b><span>Claims</span></div>
+        <div class="stat"><b>${s.logs}</b><span>Log entries</span></div>`;
+}
+
+async function loadUsers() {
+    const r = await api('/api/admin/users');
+    const tb = document.getElementById('usersBody');
+    tb.innerHTML = '';
+    r.users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${u.id}</td>
+            <td><img src="${u.avatar_url || ''}" alt="" width="22" height="22">
+                ${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.username)}</td>
+            <td><span class="role ${u.role.toLowerCase()}">${u.role}</span></td>
+            <td>${escapeHtml(u.created_at)}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+async function loadLogs() {
+    const r = await api('/api/admin/logs');
+    const tb = document.getElementById('logsBody');
+    tb.innerHTML = '';
+    r.logs.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(l.created_at)}</td>
+            <td><span class="action">${escapeHtml(l.action)}</span></td>
+            <td>${escapeHtml(l.username || '-')}</td>
+            <td>${escapeHtml(l.details || '')}</td>
+            <td>${escapeHtml(l.ip_address || '')}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+(async () => {
+    try { await loadStats(); await loadUsers(); await loadLogs(); }
+    catch (e) { alert(e.message); }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard - Lost & Found</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">Campus Lost &amp; Found</div>
+    <div class="search">
+        <input id="searchBox" type="search" placeholder="Search by title, location...">
+    </div>
+    <div class="user">
+        <img id="meAvatar" alt="" width="32" height="32">
+        <span id="meName">...</span>
+        <a id="adminLink" class="link hidden" href="admin.html">Admin</a>
+        <button id="postBtn"  class="btn primary">+ Post item</button>
+        <button id="logoutBtn" class="btn ghost">Log out</button>
+    </div>
+</header>
+
+<main class="container">
+
+    <div class="filters">
+        <button class="chip active" data-type="">All</button>
+        <button class="chip lost"   data-type="LOST">Lost</button>
+        <button class="chip found"  data-type="FOUND">Found</button>
+        <span id="resultCount" class="muted"></span>
+    </div>
+
+    <section id="grid" class="grid"></section>
+    <p id="empty" class="empty hidden">No items match your filters.</p>
+
+</main>
+
+<!-- ITEM DETAIL MODAL ----------------------------------------------------->
+<div id="detailModal" class="modal hidden">
+    <div class="modal-card">
+        <button class="close" data-close>&times;</button>
+        <h2 id="dTitle"></h2>
+        <p id="dBadge"></p>
+        <div class="row"><strong>Description:</strong> <span id="dDesc"></span></div>
+        <div class="row"><strong>Category:</strong>    <span id="dCat"></span></div>
+        <div class="row"><strong>Location:</strong>    <span id="dLoc"></span></div>
+        <div class="row"><strong>Coords:</strong>      <span id="dGeo"></span></div>
+        <div class="row reporter">
+            <img id="dRepAv" alt="" width="32" height="32">
+            <span>Reported by <strong id="dRepName"></strong> on <span id="dDate"></span></span>
+        </div>
+
+        <hr>
+
+        <h3>I think this is mine / I have it</h3>
+        <form id="claimForm">
+            <textarea name="message" rows="3" placeholder="Add a short note..."></textarea>
+            <button class="btn primary" type="submit">Submit claim</button>
+        </form>
+
+        <h3 id="claimsTitle" class="hidden">Claims received</h3>
+        <ul id="claimsList" class="claims"></ul>
+
+        <button id="deleteItemBtn" class="btn danger hidden">Delete this item</button>
+    </div>
+</div>
+
+<!-- POST ITEM MODAL ------------------------------------------------------->
+<div id="postModal" class="modal hidden">
+    <div class="modal-card">
+        <button class="close" data-close>&times;</button>
+        <h2>Post a Lost or Found item</h2>
+        <form id="postForm">
+            <label>Type
+                <select name="type" required>
+                    <option value="LOST">I LOST something</option>
+                    <option value="FOUND">I FOUND something</option>
+                </select>
+            </label>
+            <label>Title
+                <input type="text" name="title" required maxlength="150">
+            </label>
+            <label>Description
+                <textarea name="description" rows="3"></textarea>
+            </label>
+            <label>Category
+                <input type="text" name="category" placeholder="e.g. Personal, Electronics">
+            </label>
+            <label>Location (the form will look up coordinates)
+                <input id="postLocation" type="text" name="location" placeholder="e.g. CCE Building, UM Davao">
+            </label>
+            <p id="geoHint" class="hint muted"></p>
+            <input type="hidden" name="latitude" id="postLat">
+            <input type="hidden" name="longitude" id="postLng">
+            <button class="btn primary" type="submit">Post item</button>
+        </form>
+        <p id="postMsg" class="msg"></p>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+// ---------------------------------------------------------------- bootstrap
+Auth.requireLogin();
+
+document.getElementById('logoutBtn').onclick = () => Auth.logout();
+
+const me = Auth.user();
+document.getElementById('meName').textContent = me.full_name;
+document.getElementById('meAvatar').src = me.avatar_url || '';
+if (me.role === 'ADMIN') document.getElementById('adminLink').classList.remove('hidden');
+
+// ---------------------------------------------------------------- list/filters
+let currentType = '';
+let currentSearch = '';
+
+const chips = document.querySelectorAll('.chip');
+chips.forEach(c => c.addEventListener('click', () => {
+    chips.forEach(x => x.classList.toggle('active', x === c));
+    currentType = c.dataset.type;
+    loadItems();
+}));
+
+let searchTimer;
+document.getElementById('searchBox').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        currentSearch = e.target.value.trim();
+        loadItems();
+    }, 250);
+});
+
+async function loadItems() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '<p class="muted">Loading...</p>';
+    try {
+        const qs = new URLSearchParams();
+        if (currentType)   qs.set('type', currentType);
+        if (currentSearch) qs.set('q',    currentSearch);
+        const data = await api('/api/items?' + qs.toString());
+        document.getElementById('resultCount').textContent = data.count + ' item(s)';
+        document.getElementById('empty').classList.toggle('hidden', data.count > 0);
+        grid.innerHTML = '';
+        data.items.forEach(it => grid.appendChild(itemCard(it)));
+    } catch (e) {
+        grid.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
+    }
+}
+
+function itemCard(it) {
+    const card = document.createElement('article');
+    card.className = 'card ' + it.type.toLowerCase();
+    card.innerHTML = `
+        <span class="badge ${it.type.toLowerCase()}">${it.type}</span>
+        <h3>${escapeHtml(it.title)}</h3>
+        <p class="muted">${escapeHtml(it.location || '—')}</p>
+        <p class="desc">${escapeHtml((it.description || '').slice(0, 90))}</p>
+        <footer>
+            <img src="${it.reporter_avatar || ''}" alt="" width="22" height="22">
+            <span>${escapeHtml(it.reporter_name)}</span>
+            <span class="status ${it.status.toLowerCase()}">${it.status}</span>
+        </footer>`;
+    card.onclick = () => openDetail(it.id);
+    return card;
+}
+
+// ---------------------------------------------------------------- detail modal
+const detail = document.getElementById('detailModal');
+let detailItem = null;
+
+async function openDetail(id) {
+    try {
+        const it = await api('/api/items/' + id);
+        detailItem = it;
+        document.getElementById('dTitle').textContent = it.title;
+        document.getElementById('dBadge').innerHTML  =
+            `<span class="badge ${it.type.toLowerCase()}">${it.type}</span>
+             <span class="status ${it.status.toLowerCase()}">${it.status}</span>`;
+        document.getElementById('dDesc').textContent = it.description || '—';
+        document.getElementById('dCat').textContent  = it.category    || '—';
+        document.getElementById('dLoc').textContent  = it.location    || '—';
+        document.getElementById('dGeo').textContent  =
+            it.latitude && it.longitude
+              ? it.latitude.toFixed(5) + ', ' + it.longitude.toFixed(5)
+              : '—';
+        document.getElementById('dRepAv').src        = it.reporter_avatar || '';
+        document.getElementById('dRepName').textContent = it.reporter_name;
+        document.getElementById('dDate').textContent = it.created_at;
+
+        // Claim form: only if item is OPEN and you are not the owner
+        const canClaim = it.status === 'OPEN' && it.reporter_id !== me.id;
+        document.getElementById('claimForm').style.display = canClaim ? 'block' : 'none';
+
+        // Owner / admin extras
+        const isOwner = it.reporter_id === me.id || me.role === 'ADMIN';
+        document.getElementById('deleteItemBtn').classList.toggle('hidden', !isOwner);
+
+        const list  = document.getElementById('claimsList');
+        const title = document.getElementById('claimsTitle');
+        list.innerHTML = '';
+        title.classList.add('hidden');
+        if (isOwner) {
+            try {
+                const r = await api('/api/items/' + id + '/claims');
+                if (r.claims.length) {
+                    title.classList.remove('hidden');
+                    r.claims.forEach(cl => list.appendChild(claimRow(cl)));
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        detail.classList.remove('hidden');
+    } catch (e) { alert(e.message); }
+}
+
+function claimRow(cl) {
+    const li = document.createElement('li');
+    li.className = 'claim-row ' + cl.status.toLowerCase();
+    li.innerHTML = `
+        <img src="${cl.claimer_avatar || ''}" alt="" width="28" height="28">
+        <div class="claim-body">
+            <strong>${escapeHtml(cl.claimer_name)}</strong>
+            <span class="status">${cl.status}</span>
+            <p>${escapeHtml(cl.message || '(no message)')}</p>
+        </div>`;
+    if (cl.status === 'PENDING') {
+        const ok = document.createElement('button');
+        ok.className = 'btn small primary'; ok.textContent = 'Approve';
+        ok.onclick = () => decide(cl.id, true);
+        const no = document.createElement('button');
+        no.className = 'btn small ghost';   no.textContent = 'Reject';
+        no.onclick = () => decide(cl.id, false);
+        li.appendChild(ok); li.appendChild(no);
+    }
+    return li;
+}
+
+async function decide(claimId, approve) {
+    try {
+        await api('/api/claims/' + claimId + '/' + (approve ? 'approve' : 'reject'),
+                  { method:'POST' });
+        await openDetail(detailItem.id);
+        loadItems();
+    } catch (e) { alert(e.message); }
+}
+
+document.getElementById('claimForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const message = ev.target.message.value;
+    try {
+        await api('/api/claims', { method:'POST', body:{ item_id: detailItem.id, message } });
+        alert('Claim submitted. The owner will review it.');
+        ev.target.reset();
+        detail.classList.add('hidden');
+        loadItems();
+    } catch (e) { alert(e.message); }
+});
+
+document.getElementById('deleteItemBtn').onclick = async () => {
+    if (!confirm('Delete this item?')) return;
+    try {
+        await api('/api/items/' + detailItem.id, { method:'DELETE' });
+        detail.classList.add('hidden');
+        loadItems();
+    } catch (e) { alert(e.message); }
+};
+
+// ---------------------------------------------------------------- post modal
+const postModal = document.getElementById('postModal');
+document.getElementById('postBtn').onclick = () => {
+    document.getElementById('postForm').reset();
+    document.getElementById('postLat').value = '';
+    document.getElementById('postLng').value = '';
+    document.getElementById('geoHint').textContent = '';
+    document.getElementById('postMsg').textContent = '';
+    postModal.classList.remove('hidden');
+};
+
+// External API #1: geocode the location field as the user types.
+let geoTimer;
+document.getElementById('postLocation').addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    document.getElementById('postLat').value = '';
+    document.getElementById('postLng').value = '';
+    document.getElementById('geoHint').textContent = '';
+    if (!v) return;
+    clearTimeout(geoTimer);
+    geoTimer = setTimeout(async () => {
+        try {
+            const r = await api('/api/external/geocode?q=' + encodeURIComponent(v));
+            if (r.found) {
+                document.getElementById('postLat').value = r.lat;
+                document.getElementById('postLng').value = r.lng;
+                document.getElementById('geoHint').textContent =
+                    'Pinned: ' + r.display + ' (' + r.lat.toFixed(4) + ', ' + r.lng.toFixed(4) + ')';
+            } else {
+                document.getElementById('geoHint').textContent = 'Location not found in map data, will save text only.';
+            }
+        } catch (e) { /* silent */ }
+    }, 600);
+});
+
+document.getElementById('postForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const data = Object.fromEntries(new FormData(ev.target).entries());
+    if (data.latitude  === '') delete data.latitude;
+    if (data.longitude === '') delete data.longitude;
+    try {
+        await api('/api/items', { method:'POST', body:data });
+        postModal.classList.add('hidden');
+        loadItems();
+    } catch (e) { document.getElementById('postMsg').textContent = e.message; }
+});
+
+// Modal close-buttons
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (ev) => {
+    ev.target.closest('.modal').classList.add('hidden');
+}));
+
+// Initial load
+loadItems();
+</script>
+
+</body>
+</html>

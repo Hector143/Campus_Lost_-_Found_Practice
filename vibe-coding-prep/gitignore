@@ -1,0 +1,21 @@
+# Compiled Java class files
+backend/build/
+*.class
+
+# JAR files (do NOT ignore the connector — keep it in lib/)
+# but ignore stray jars elsewhere
+*.jar
+!backend/lib/*.jar
+
+# Logs
+*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+# Local environment overrides
+.env
