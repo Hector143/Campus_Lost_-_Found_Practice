@@ -3,6 +3,22 @@
 -- Run once with:   mysql -u root -p < schema.sql
 -- =========================================================================
 
+
+-- =========================================================================
+-- Campus Lost & Found Hub – database schema
+-- Run once with:   mysql -u root -p < schema.sql
+-- =========================================================================
+
+-- =========================================================================
+-- Campus Lost & Found Hub – database schema
+-- Run once with:   mysql -u root -p < schema.sql
+-- =========================================================================
+
+-- =========================================================================
+-- Campus Lost & Found Hub – database schema
+-- Run once with:   mysql -u root -p < schema.sql
+-- =========================================================================
+
 DROP DATABASE IF EXISTS lost_and_found;
 CREATE DATABASE lost_and_found CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE lost_and_found;
